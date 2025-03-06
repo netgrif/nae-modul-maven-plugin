@@ -24,6 +24,12 @@ import java.util.Set;
 
 import static org.twdata.maven.mojoexecutor.MojoExecutor.*;
 
+/**
+ * Execution to build module zip package with module jar and its unique dependencies.
+ * It's assumed that a host application will be com.netgrif:application-engine, but it can be configured for other application.
+ * The host application is used for the module dependency packaging as dependencies that also the host application has
+ * are ignored and not packaged with the module.
+ */
 @Mojo(name = "build", defaultPhase = LifecyclePhase.PACKAGE,
         requiresDependencyCollection = ResolutionScope.COMPILE_PLUS_RUNTIME,
         requiresDependencyResolution = ResolutionScope.COMPILE_PLUS_RUNTIME)
@@ -46,6 +52,9 @@ public class BuildModuleMojo extends AbstractMojo {
     @Parameter(property = "host-app")
     private SimpleArtifact hostApp;
 
+    @Parameter(property = "NAEVersion")
+    private String naeVersion;
+
     @Parameter(property = "excludes")
     private List<String> excludes = new ArrayList<>();
 
@@ -61,19 +70,22 @@ public class BuildModuleMojo extends AbstractMojo {
             DependencyNode rootNode = dependencyCollectorBuilder.collectDependencyGraph(buildingRequest, null);
             Set<DependencyNode> hostAppDependencies = new HashSet<>();
             DependencyNode hostDep = null;
-            if (hostApp != null && hostApp.isValid()) {
-                hostDep = findDependency(hostApp.getGroupId(), hostApp.getArtifactId(), hostApp.getVersion(), rootNode);
-                if (hostDep == null || hostDep.getArtifact() == null)
-                    throw new HostApplicationNotFoundException("Cannot find host app artifact as dependency: " + hostApp);
-                if (log.isDebugEnabled())
-                    log.debug("Host app dependency: " + hostDep.getArtifact());
-                hostAppDependencies = flattenDependencies(hostDep);
-                log.info("Dependencies aggregated " + hostAppDependencies.size() + " from host app");
-                hostAppDependencies.forEach(d -> {
-                    if (log.isDebugEnabled())
-                        log.debug(d.getArtifact().toString());
-                });
+            SimpleArtifact hostAppArtifact = getHostAppArtifact();
+            if (hostAppArtifact == null) {
+                throw new HostApplicationNotFoundException("Host application cannot be resolved");
             }
+            hostDep = findDependency(hostAppArtifact.getGroupId(), hostAppArtifact.getArtifactId(), hostAppArtifact.getVersion(), rootNode);
+            if (hostDep == null || hostDep.getArtifact() == null)
+                throw new HostApplicationNotFoundException("Cannot find host app artifact as dependency: " + hostAppArtifact);
+            if (log.isDebugEnabled())
+                log.debug("Host app dependency: " + hostDep.getArtifact());
+            hostAppDependencies = flattenDependencies(hostDep);
+            log.info("Dependencies aggregated " + hostAppDependencies.size() + " from host app");
+            hostAppDependencies.forEach(d -> {
+                if (log.isDebugEnabled())
+                    log.debug(d.getArtifact().toString());
+            });
+
 
             // Build assembly descriptor
             AssemblyDescriptorBuilder assembly = new AssemblyDescriptorBuilder();
@@ -84,7 +96,10 @@ public class BuildModuleMojo extends AbstractMojo {
                 separateDescriptor(assembly, hostDep, hostAppDependencies);
             }
             File targetDir = new File(project.getBuild().getDirectory() + File.separator + "assembly");
-            targetDir.mkdirs();
+            boolean targetDirCreation = targetDir.mkdirs();
+            if (!targetDirCreation) {
+                throw new RuntimeException("Could not create target directory for package assembly: " + targetDir);
+            }
             File descriptor = assembly.build(targetDir.getPath());
             if (log.isDebugEnabled())
                 log.debug("maven-assembly-plugin descriptor saved on path: " + descriptor.getAbsolutePath());
@@ -107,6 +122,19 @@ public class BuildModuleMojo extends AbstractMojo {
         } catch (Exception e) {
             throw new MojoExecutionException(e);
         }
+    }
+
+    private SimpleArtifact getHostAppArtifact() {
+        SimpleArtifact hostAppArtifact = null;
+        if (hostApp == null && (naeVersion == null || naeVersion.isEmpty())) {
+            throw new HostApplicationNotFoundException("Host application or NAE version not found. At least one must be defined");
+        }
+        if (naeVersion != null && !naeVersion.isEmpty()) {
+            hostAppArtifact = new SimpleArtifact(Constants.NETGRIF_GROUP_ID, Constants.NAE_ARTIFACT_ID, naeVersion);
+        } else if (hostApp != null && hostApp.isValid()) {
+            hostAppArtifact = hostApp;
+        }
+        return hostAppArtifact;
     }
 
     private DependencyNode findDependency(String groupId, String artifactId, String version, DependencyNode node) {
