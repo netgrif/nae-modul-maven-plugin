@@ -1,0 +1,29 @@
+name: NAE Module Maven plugin
+id: 'ari:cloud:compass:cf7e01ca-9dd0-4ce4-8eff-ed691167a5c8:component/8dbfc4d5-cd9f-4673-9aa2-852987b6bed4/396a7ce9-8cd3-4d52-aa8e-44897f5f9eb3'
+description: Maven plugin for building NAE modules
+configVersion: 1
+typeId: LIBRARY
+ownerId: 'ari:cloud:identity::team/b07f9499-6346-4111-94ac-4b26888b879a'
+fields:
+  lifecycle: Active
+  tier: 3
+links:
+  - name: Plugin repository
+    type: REPOSITORY
+    url: 'https://github.com/netgrif/nae-modul-maven-plugin'
+  - name: NAE Jira
+    type: PROJECT
+    url: https://netgrif.atlassian.net/jira/software/c/projects/NAE/boards/1/backlog
+  - name: 'Slack #product-dev'
+    type: CHAT_CHANNEL
+    url: https://app.slack.com/client/TF61G3V32/C074GBRU84U
+relationships: { }
+labels:
+  - 'repo:github'
+  - 'license:apache-2'
+  - 'language:java'
+  - maven-plugin
+customFields: null
+
+# Learn more about formatting compass.yml:
+# https://go.atlassian.com/compass-yml-format
