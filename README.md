@@ -6,7 +6,7 @@ Maven plugin for building NAE modules
 
 ```xml
 <plugin>
-    <groupId>com.netgrif.maven</groupId>
+    <groupId>com.netgrif</groupId>
     <artifactId>nae-module-maven-plugin</artifactId>
     <version>1.0.0</version>
 </plugin>
