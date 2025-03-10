@@ -17,6 +17,9 @@ import org.apache.maven.shared.dependency.graph.DependencyCollectorBuilder;
 import org.apache.maven.shared.dependency.graph.DependencyNode;
 
 import java.io.File;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -96,9 +99,14 @@ public class BuildModuleMojo extends AbstractMojo {
                 separateDescriptor(assembly, hostDep, hostAppDependencies);
             }
             File targetDir = new File(project.getBuild().getDirectory() + File.separator + "assembly");
-            boolean targetDirCreation = targetDir.mkdirs();
-            if (!targetDirCreation) {
-                throw new RuntimeException("Could not create target directory for package assembly: " + targetDir);
+            try {
+                Files.createDirectories(targetDir.toPath());
+                log.info("Successfully ensured target directory exists: " + targetDir.getAbsolutePath());
+            } catch (IOException e) {
+                throw new RuntimeException("Could not create target directory for package assembly: " + targetDir, e);
+            }
+            if (!targetDir.getParentFile().canWrite()) {
+                throw new RuntimeException("Cannot write to parent directory: " + targetDir.getParent());
             }
             File descriptor = assembly.build(targetDir.getPath());
             if (log.isDebugEnabled())
