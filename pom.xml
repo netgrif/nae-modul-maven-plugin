@@ -308,10 +308,6 @@
                     <url>https://maven.pkg.github.com/netgrif/nae-module-maven-plugin</url>
                 </repository>
             </distributionManagement>
-            <build>
-                <plugins>
-                </plugins>
-            </build>
         </profile>
         <profile>
             <id>ossrh-publish</id>
