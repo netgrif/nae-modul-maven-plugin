@@ -15,11 +15,11 @@ import org.apache.maven.project.MavenProject;
 import org.apache.maven.project.ProjectBuildingRequest;
 import org.apache.maven.shared.dependency.graph.DependencyCollectorBuilder;
 import org.apache.maven.shared.dependency.graph.DependencyNode;
+import org.eclipse.sisu.Nullable;
 
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -74,20 +74,22 @@ public class BuildModuleMojo extends AbstractMojo {
             Set<DependencyNode> hostAppDependencies = new HashSet<>();
             DependencyNode hostDep = null;
             SimpleArtifact hostAppArtifact = getHostAppArtifact();
+
             if (hostAppArtifact == null) {
-                throw new HostApplicationNotFoundException("Host application cannot be resolved");
-            }
-            hostDep = findDependency(hostAppArtifact.getGroupId(), hostAppArtifact.getArtifactId(), hostAppArtifact.getVersion(), rootNode);
-            if (hostDep == null || hostDep.getArtifact() == null)
-                throw new HostApplicationNotFoundException("Cannot find host app artifact as dependency: " + hostAppArtifact);
-            if (log.isDebugEnabled())
-                log.debug("Host app dependency: " + hostDep.getArtifact());
-            hostAppDependencies = flattenDependencies(hostDep);
-            log.info("Dependencies aggregated " + hostAppDependencies.size() + " from host app");
-            hostAppDependencies.forEach(d -> {
+                log.warn("Packaging module without host application");
+            } else {
+                hostDep = findDependency(hostAppArtifact.getGroupId(), hostAppArtifact.getArtifactId(), hostAppArtifact.getVersion(), rootNode);
+                if (hostDep == null || hostDep.getArtifact() == null)
+                    throw new HostApplicationNotFoundException("Cannot find host app artifact as dependency: " + hostAppArtifact);
                 if (log.isDebugEnabled())
-                    log.debug(d.getArtifact().toString());
-            });
+                    log.debug("Host app dependency: " + hostDep.getArtifact());
+                hostAppDependencies = flattenDependencies(hostDep);
+                log.info("Dependencies aggregated " + hostAppDependencies.size() + " from host app");
+                hostAppDependencies.forEach(d -> {
+                    if (log.isDebugEnabled())
+                        log.debug(d.getArtifact().toString());
+                });
+            }
 
 
             // Build assembly descriptor
@@ -135,17 +137,18 @@ public class BuildModuleMojo extends AbstractMojo {
     private SimpleArtifact getHostAppArtifact() {
         SimpleArtifact hostAppArtifact = null;
         if (hostApp == null && (naeVersion == null || naeVersion.isEmpty())) {
-            throw new HostApplicationNotFoundException("Host application or NAE version not found. At least one must be defined");
+            log.warn("Host application was not found. Packaging module without host application");
+            return null;
         }
         if (naeVersion != null && !naeVersion.isEmpty()) {
             hostAppArtifact = new SimpleArtifact(Constants.NETGRIF_GROUP_ID, Constants.NAE_ARTIFACT_ID, naeVersion);
-        } else if (hostApp != null && hostApp.isValid()) {
+        } else if (hostApp.isValid()) {
             hostAppArtifact = hostApp;
         }
         return hostAppArtifact;
     }
 
-    private DependencyNode findDependency(String groupId, String artifactId, String version, DependencyNode node) {
+    private static DependencyNode findDependency(String groupId, String artifactId, String version, DependencyNode node) {
         Artifact depArtifact = node.getArtifact();
         if (depArtifact.getGroupId().equalsIgnoreCase(groupId) && depArtifact.getArtifactId().equalsIgnoreCase(artifactId) && depArtifact.getVersion().equalsIgnoreCase(version)) {
             return node;
@@ -161,9 +164,9 @@ public class BuildModuleMojo extends AbstractMojo {
         return null;
     }
 
-    private Set<DependencyNode> flattenDependencies(DependencyNode parent) {
+    private static Set<DependencyNode> flattenDependencies(DependencyNode parent) {
         Set<DependencyNode> dependencies = new HashSet<>();
-        if (!parent.getChildren().isEmpty()) {
+        if (parent != null && !parent.getChildren().isEmpty()) {
             parent.getChildren().forEach(dep -> {
                 dependencies.add(dep);
                 dependencies.addAll(flattenDependencies(dep));
@@ -172,7 +175,7 @@ public class BuildModuleMojo extends AbstractMojo {
         return dependencies;
     }
 
-    public void separateDescriptor(AssemblyDescriptorBuilder assembly, DependencyNode hostDep, Set<DependencyNode> hostAppDependencies) {
+    public void separateDescriptor(AssemblyDescriptorBuilder assembly, @Nullable DependencyNode hostDep, @Nullable Set<DependencyNode> hostAppDependencies) {
         assembly.format("zip");
         assembly.includeBaseDirectory(false);
         DependencySetBuilder depSet = assembly.dependencySets()
@@ -182,15 +185,27 @@ public class BuildModuleMojo extends AbstractMojo {
                 .useTransitiveFiltering(true)
                 .unpack(false)
                 .scope("runtime");
-        if (hostDep != null)
+        if (hostDep != null) {
             depSet.exclude(hostDep);
-        hostAppDependencies.forEach(depSet::exclude);
+        }
+        if (hostAppDependencies != null) {
+            hostAppDependencies.forEach(depSet::exclude);
+        }
         if (log.isDebugEnabled())
             log.debug("Excluding extra dependencies: " + excludes);
         excludes.forEach(depSet::exclude);
     }
 
-    public void singleDescriptor(AssemblyDescriptorBuilder assembly, DependencyNode hostDep, Set<DependencyNode> hostAppDependencies) {
+    /**
+     * Configures an assembly descriptor to generate a single descriptor containing specific files
+     * and dependencies, while excluding certain unnecessary ones. This method customizes the assembly
+     * builder by defining file sets and dependency sets, including exclusions for dependencies specified.
+     *
+     * @param assembly            the {@link AssemblyDescriptorBuilder} used to configure the assembly descriptor
+     * @param hostDep             the {@link DependencyNode} representing the main host dependency to exclude, can be null
+     * @param hostAppDependencies the {@link Set} of {@link DependencyNode} representing the additional host application dependencies to exclude, can be null
+     */
+    public void singleDescriptor(AssemblyDescriptorBuilder assembly, @Nullable DependencyNode hostDep, @Nullable Set<DependencyNode> hostAppDependencies) {
         assembly.format("zip");
         assembly.includeBaseDirectory(false);
         assembly.fileSets().fileSet()
@@ -204,9 +219,12 @@ public class BuildModuleMojo extends AbstractMojo {
                 .useTransitiveFiltering(true)
                 .unpack(false)
                 .scope("runtime");
-        if (hostDep != null)
+        if (hostDep != null) {
             depSet.exclude(hostDep);
-        hostAppDependencies.forEach(depSet::exclude);
+        }
+        if (hostAppDependencies != null) {
+            hostAppDependencies.forEach(depSet::exclude);
+        }
         if (log.isDebugEnabled())
             log.debug("Excluding extra dependencies: " + excludes);
         excludes.forEach(depSet::exclude);

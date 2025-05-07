@@ -17,6 +17,7 @@ public class SimpleArtifact {
     private String version;
 
     public SimpleArtifact(String artifact) {
+        if (artifact == null || artifact.isBlank()) return;
         String[] split = artifact.split(SEPARATOR);
         this.groupId = split[0];
         if (split.length > 1) {
@@ -28,11 +29,14 @@ public class SimpleArtifact {
     }
 
     public boolean equalsToArtifact(Artifact artifact) {
+        if (artifact == null) return false;
         return this.groupId.equals(artifact.getGroupId()) && this.artifactId.equals(artifact.getArtifactId()) && this.version.equals(artifact.getVersion());
     }
 
     public boolean isValid() {
-        return !groupId.isBlank() && !artifactId.isBlank() && !version.isBlank();
+        return groupId != null && !groupId.isBlank() &&
+                artifactId != null && !artifactId.isBlank() &&
+                version != null && !version.isBlank();
     }
 
     @Override
