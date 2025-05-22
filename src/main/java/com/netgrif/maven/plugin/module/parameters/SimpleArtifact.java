@@ -1,13 +1,9 @@
 package com.netgrif.maven.plugin.module.parameters;
 
-import lombok.AllArgsConstructor;
 import lombok.Data;
-import lombok.NoArgsConstructor;
 import org.apache.maven.artifact.Artifact;
 
 @Data
-@NoArgsConstructor
-@AllArgsConstructor
 public class SimpleArtifact {
 
     public static final String SEPARATOR = ":";
@@ -28,6 +24,15 @@ public class SimpleArtifact {
         }
     }
 
+    public SimpleArtifact() {
+    }
+
+    public SimpleArtifact(String groupId, String artifactId, String version) {
+        this.groupId = groupId;
+        this.artifactId = artifactId;
+        this.version = version;
+    }
+
     public boolean equalsToArtifact(Artifact artifact) {
         if (artifact == null) return false;
         return this.groupId.equals(artifact.getGroupId()) && this.artifactId.equals(artifact.getArtifactId()) && this.version.equals(artifact.getVersion());
@@ -37,6 +42,18 @@ public class SimpleArtifact {
         return groupId != null && !groupId.isBlank() &&
                 artifactId != null && !artifactId.isBlank() &&
                 version != null && !version.isBlank();
+    }
+
+    public String getGroupId() {
+        return groupId;
+    }
+
+    public String getArtifactId() {
+        return artifactId;
+    }
+
+    public String getVersion() {
+        return version;
     }
 
     @Override
