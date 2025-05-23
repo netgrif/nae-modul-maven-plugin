@@ -640,7 +640,10 @@ public class BuildModuleMojo extends AbstractMojo {
         );
 
         try (JarInputStream jarIn = new JarInputStream(new FileInputStream(jarFile));
-             JarOutputStream jarOut = new JarOutputStream(new FileOutputStream(tempJar), jarIn.getManifest())) {
+             JarOutputStream jarOut = new JarOutputStream(
+                     new FileOutputStream(tempJar),
+                     jarIn.getManifest() != null ? jarIn.getManifest() : new Manifest())) {
+
             JarEntry entry;
             byte[] buffer = new byte[8192];
             while ((entry = jarIn.getNextJarEntry()) != null) {
