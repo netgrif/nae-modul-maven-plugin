@@ -30,7 +30,14 @@ import java.io.OutputStream;
         requiresDependencyResolution = ResolutionScope.COMPILE_PLUS_RUNTIME)
 public class DeployModuleMojo extends AbstractMojo {
 
-    private final Log log = getLog();
+    /**
+     * Retrieves the logging instance for the current context.
+     *
+     * @return the logging instance
+     */
+    private Log log() {
+        return getLog();
+    }
 
     @Component
     private MavenProject project;
@@ -58,14 +65,14 @@ public class DeployModuleMojo extends AbstractMojo {
         builder.addBinaryBody("file", moduleFile, ContentType.APPLICATION_OCTET_STREAM, moduleFile.getName());
         final HttpEntity entity = builder.build();
 
-        final ProgressListener progressListener = percentage -> log.info("File upload progress: "+percentage);
+        final ProgressListener progressListener = percentage -> log().info("File upload progress: " + percentage);
         httpPost.setEntity(new ProgressEntityWrapper(entity, progressListener));
 
         try (CloseableHttpClient client = HttpClients.custom()
                 .setDefaultCredentialsProvider(credentialsProvider)
                 .build()) {
             client.execute(httpPost, response -> {
-                log.info(response.getCode() + " " + response.getReasonPhrase());
+                log().info(response.getCode() + " " + response.getReasonPhrase());
                 return "";
             });
         } catch (IOException e) {
