@@ -6,7 +6,7 @@
 
     <groupId>com.netgrif</groupId>
     <artifactId>nae-module-maven-plugin</artifactId>
-    <version>1.1.0</version>
+    <version>1.2.0</version>
     <packaging>maven-plugin</packaging>
 
     <name>nae-module-maven-plugin</name>
