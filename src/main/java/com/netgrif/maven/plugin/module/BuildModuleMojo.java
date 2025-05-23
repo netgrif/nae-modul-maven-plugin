@@ -49,9 +49,9 @@ import static org.twdata.maven.mojoexecutor.MojoExecutor.*;
 public class BuildModuleMojo extends AbstractMojo {
 
     /**
-     * Retrieves the logging instance for the current context.
+     * Returns the logger for this Mojo instance.
      *
-     * @return the logging instance
+     * @return the logger associated with this Mojo
      */
     private Log log() {
         return getLog();
@@ -145,6 +145,23 @@ public class BuildModuleMojo extends AbstractMojo {
     @Parameter(property = "customManifestOutputJar", defaultValue = "false")
     private boolean customManifestOutputJar = false;
 
+    /**
+     * Executes the Maven Mojo to build a module ZIP package containing the module JAR and its unique dependencies, excluding those shared with a specified host application.
+     *
+     * <p>
+     * This method orchestrates the following steps:
+     * <ul>
+     *   <li>Collects the project's dependency graph and identifies dependencies provided by the host application.</li>
+     *   <li>Creates or modifies the module JAR with a custom manifest containing enriched project metadata.</li>
+     *   <li>Generates Spring auto-configuration imports for classes annotated with {@code @Configuration} or {@code @AutoConfiguration}.</li>
+     *   <li>Removes specific application and worker property files from the JAR as needed.</li>
+     *   <li>Builds an assembly descriptor to package the module and its dependencies, excluding those present in the host application and any additional specified exclusions.</li>
+     *   <li>Invokes the Maven Assembly Plugin to produce the final distributable ZIP package.</li>
+     * </ul>
+     * If the host application artifact cannot be found among the dependencies, a {@link HostApplicationNotFoundException} is thrown.
+     *
+     * @throws MojoExecutionException if any step in the packaging process fails
+     */
     @Override
     public void execute() throws MojoExecutionException {
         ProjectBuildingRequest buildingRequest = new DefaultProjectBuildingRequest(session.getProjectBuildingRequest());
@@ -224,21 +241,13 @@ public class BuildModuleMojo extends AbstractMojo {
     }
 
     /**
-     * Creates a JAR file by either modifying the existing JAR's manifest or generating a new JAR file with a custom manifest.
-     * This method enables the addition of custom attributes to the manifest file without disrupting the rest of the JAR contents.
+     * Updates the project's JAR file to include a custom manifest with additional attributes.
      * <p>
-     * Steps:
-     * 1. Locates the source JAR file in the project's build directory.
-     * 2. Builds a custom manifest with additional attributes.
-     * 3. Depending on the `customManifestOutputJar` flag:
-     * - If false: Modifies the existing JAR file, replacing the manifest.
-     * - If true: Creates a new JAR file with a custom manifest.
-     * <p>
-     * If the original JAR file is not found, logs a warning and exits the operation.
-     * When modifying the existing JAR file, the method ensures that the temporary JAR is renamed back to the original name.
-     * If file operations (e.g., delete or rename) fail, an {@link IOException} is thrown.
+     * If {@code customManifestOutputJar} is false, replaces the manifest in the existing JAR file in place.
+     * If {@code customManifestOutputJar} is true, creates a new JAR file with the custom manifest appended to the filename.
+     * If the original JAR does not exist, logs a warning and does nothing.
      *
-     * @throws IOException if an error occurs during file handling or modifications.
+     * @throws IOException if file operations such as deletion or renaming fail
      */
     private void createJarWithCustomManifest() throws IOException {
         File sourceJar = new File(project.getBuild().getDirectory(), project.getBuild().getFinalName() + ".jar");
@@ -267,14 +276,12 @@ public class BuildModuleMojo extends AbstractMojo {
     }
 
     /**
-     * Copies the contents of a JAR file to a new JAR file, excluding the MANIFEST file.
-     * This method allows for the creation of a new JAR file with the same entries as the original,
-     * excluding the original manifest file while using the provided manifest.
+     * Creates a new JAR file by copying all entries from the input JAR except the manifest, using the provided manifest for the output.
      *
-     * @param inputJar  the original JAR file to copy from
-     * @param outputJar the new JAR file to be created
-     * @param manifest  the custom manifest to be used for the new JAR file
-     * @throws IOException if an I/O error occurs during the copying process
+     * @param inputJar the source JAR file to read entries from
+     * @param outputJar the destination JAR file to write entries to
+     * @param manifest the manifest to include in the output JAR
+     * @throws IOException if an error occurs during file reading or writing
      */
     private void copyJarExcludingManifest(File inputJar, File outputJar, Manifest manifest) throws IOException {
         try (
@@ -299,21 +306,14 @@ public class BuildModuleMojo extends AbstractMojo {
     }
 
     /**
-     * Builds a custom manifest object by either reading the manifest from an existing source JAR file
-     * or creating a new manifest if none exists. It then enriches the manifest with custom attributes
-     * derived from the project metadata, such as name, version, URLs, description, developers, and other details.
+     * Constructs a JAR manifest enriched with project metadata and custom attributes.
      * <p>
-     * The custom attributes are dynamically populated from project fields and include metadata such as:
-     * - Project name, version, group ID, artifact ID, and description.
-     * - Source control details (SCM connection and URL).
-     * - Licensing and organization information.
-     * - Build details such as the JDK version and build timestamp.
-     * - A combined list of developers associated with the project, including their names, emails, and organizations.
-     * <p>
-     * This method uses a default manifest version of "1.0" if no version is specified.
+     * Reads the manifest from the project's built JAR file if available, or creates a new manifest if not.
+     * Adds custom attributes prefixed with "Netgrif-" containing project information such as name, version, group ID, artifact ID, description, SCM details, license, organization, issue management, build JDK version, build timestamp, and a formatted list of developers.
+     * Ensures the manifest version is set to "1.0" if not already present.
      *
-     * @return a fully constructed {@link Manifest} object augmented with project-specific custom attributes
-     * @throws IOException if an error occurs while reading the source JAR file or during file operations
+     * @return a {@link Manifest} containing both standard and project-specific custom attributes
+     * @throws IOException if reading the source JAR file fails
      */
     private Manifest buildCustomManifest() throws IOException {
         File sourceJar = new File(project.getBuild().getDirectory(), project.getBuild().getFinalName() + ".jar");
@@ -390,13 +390,10 @@ public class BuildModuleMojo extends AbstractMojo {
         return manifest;
     }
 
-    /**
-     * Adds a key-value pair to the specified map if the value is not null
-     * and not blank. The value is converted to a string before insertion.
+    /****
+     * Inserts the key-value pair into the map if the value is non-null and not blank.
      *
-     * @param map   the map to which the key-value pair will be added, must not be null
-     * @param key   the key to be added to the map, must not be null
-     * @param value the value to associate with the key, added only if non-null and non-blank
+     * The value is converted to a string before insertion. No action is taken if the value is null or blank.
      */
     private void putIfNotNull(Map<String, String> map, String key, Object value) {
         if (value != null && !String.valueOf(value).isBlank()) {
@@ -405,14 +402,13 @@ public class BuildModuleMojo extends AbstractMojo {
     }
 
     /**
-     * Retrieves the host application artifact based on the provided configuration.
-     * If the host application is not found and no specific version information is provided,
-     * a warning is logged, and the method returns null. Otherwise, it attempts to create
-     * a {@link SimpleArtifact} instance either using the provided version information or
-     * by validating the host application.
+     * Determines the host application artifact to use for dependency exclusion during packaging.
+     * <p>
+     * Returns a {@link SimpleArtifact} representing the host application based on the configured
+     * host application coordinates or a specified NAE version. If neither is provided, logs a warning
+     * and returns {@code null}.
      *
-     * @return the {@link SimpleArtifact} representing the host application artifact,
-     * or null if both the host application and version information are unavailable or invalid.
+     * @return the host application artifact, or {@code null} if not configured
      */
     private SimpleArtifact getHostAppArtifact() {
         SimpleArtifact hostAppArtifact = null;
@@ -429,16 +425,13 @@ public class BuildModuleMojo extends AbstractMojo {
     }
 
     /**
-     * Searches for a specific dependency within a dependency tree based on the specified groupId,
-     * artifactId, and version. The method performs a recursive search through the dependency node
-     * hierarchy and returns the node that matches the provided details.
+     * Recursively searches a dependency tree for a node matching the specified groupId, artifactId, and version.
      *
-     * @param groupId    the group ID of the dependency to search for, must not be null
-     * @param artifactId the artifact ID of the dependency to search for, must not be null
-     * @param version    the version of the dependency to search for, must not be null
-     * @param node       the root dependency node to begin the search from, must not be null
-     * @return the {@link DependencyNode} containing the matching dependency if found;
-     * otherwise, returns null if no match is found within the dependency tree
+     * @param groupId the group ID to match
+     * @param artifactId the artifact ID to match
+     * @param version the version to match
+     * @param node the root node to start the search from
+     * @return the matching DependencyNode if found, or null if not present in the tree
      */
     private static DependencyNode findDependency(String groupId, String artifactId, String version, DependencyNode node) {
         Artifact depArtifact = node.getArtifact();
@@ -456,15 +449,11 @@ public class BuildModuleMojo extends AbstractMojo {
         return null;
     }
 
-    /**
-     * Recursively flattens a hierarchical dependency structure starting from the given parent node
-     * into a flat set of dependency nodes.
+    /****
+     * Returns a flat set of all dependency nodes in the subtree rooted at the given parent node.
      *
-     * @param parent the root {@link DependencyNode} from which dependencies are recursively flattened.
-     *               Can be null, in which case an empty set is returned.
-     * @return a {@link Set} of {@link DependencyNode} containing all unique dependencies in the
-     * hierarchy starting from the parent node. If the parent is null or has no children,
-     * an empty set is returned.
+     * @param parent the root dependency node to start flattening from; may be null
+     * @return a set containing all unique dependency nodes found by recursively traversing the children of the parent node, or an empty set if none
      */
     private static Set<DependencyNode> flattenDependencies(DependencyNode parent) {
         Set<DependencyNode> dependencies = new HashSet<>();
@@ -478,14 +467,12 @@ public class BuildModuleMojo extends AbstractMojo {
     }
 
     /**
-     * Configures an assembly descriptor to generate a packaged artifact with the specified properties
-     * and custom dependency exclusions. This method customizes the assembly builder by setting the
-     * output format, dependency sets, with specific exclusions defined for host dependencies and
-     * additional application dependencies.
+     * Configures the assembly descriptor to produce a ZIP archive containing only the module's unique runtime dependencies,
+     * excluding those present in the host application and any additional specified exclusions.
      *
-     * @param assembly            the {@link AssemblyDescriptorBuilder} used to configure the assembly descriptor
-     * @param hostDep             the {@link DependencyNode} representing the main host dependency to exclude, can be null
-     * @param hostAppDependencies the {@link Set} of {@link DependencyNode} representing additional host application dependencies to exclude, can be null
+     * @param assembly the assembly descriptor builder to configure
+     * @param hostDep the main host dependency to exclude from the package, or null if not applicable
+     * @param hostAppDependencies additional host application dependencies to exclude, or null if not applicable
      */
     public void separateDescriptor(AssemblyDescriptorBuilder assembly, @Nullable DependencyNode hostDep, @Nullable Set<DependencyNode> hostAppDependencies) {
         assembly.format("zip");
@@ -509,13 +496,11 @@ public class BuildModuleMojo extends AbstractMojo {
     }
 
     /**
-     * Configures an assembly descriptor to generate a single descriptor containing specific files
-     * and dependencies, while excluding certain unnecessary ones. This method customizes the assembly
-     * builder by defining file sets and dependency sets, including exclusions for dependencies specified.
+     * Configures the assembly descriptor to package the project's main artifact and its runtime dependencies into a ZIP archive, excluding dependencies present in the host application and any additional specified exclusions.
      *
-     * @param assembly            the {@link AssemblyDescriptorBuilder} used to configure the assembly descriptor
-     * @param hostDep             the {@link DependencyNode} representing the main host dependency to exclude, can be null
-     * @param hostAppDependencies the {@link Set} of {@link DependencyNode} representing the additional host application dependencies to exclude, can be null
+     * @param assembly the assembly descriptor builder to configure
+     * @param hostDep the main host dependency to exclude from the package, or null if not applicable
+     * @param hostAppDependencies additional host application dependencies to exclude, or null if not applicable
      */
     public void singleDescriptor(AssemblyDescriptorBuilder assembly, @Nullable DependencyNode hostDep, @Nullable Set<DependencyNode> hostAppDependencies) {
         assembly.format("zip");
@@ -543,23 +528,13 @@ public class BuildModuleMojo extends AbstractMojo {
     }
 
     /**
-     * Scans the project's build output directory for classes annotated with Spring configuration annotations
-     * (such as {@code @Configuration} or {@code @AutoConfiguration}) and generates a Spring factories file
-     * containing these configuration class names.
+     * Generates a Spring auto-configuration imports file by scanning the project's build output for classes annotated with
+     * {@code @Configuration} or {@code @AutoConfiguration}.
      * <p>
-     * The method performs the following steps:
-     * 1. Identifies the build output directory for the current project.
-     * 2. Ensures the necessary `META-INF/spring` directory structure exists.
-     * 3. Scans the output directory for classes annotated with Spring configuration annotations.
-     * 4. Collects and sorts the names of detected configuration classes.
-     * 5. Writes these class names into a file named `org.springframework.boot.autoconfigure.AutoConfiguration.imports`
-     * within the `META-INF/spring` directory.
-     * <p>
-     * If no configuration classes are found, the method exits without creating any files. For each detected
-     * configuration class, logging information is provided to indicate the inclusion of the class in the
-     * generated imports file.
+     * Writes the fully qualified names of detected configuration classes to {@code META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports}
+     * in the build output directory. If no such classes are found, no file is created.
      *
-     * @throws IOException if any file operations fail during the process, such as directory creation or file writing.
+     * @throws IOException if directory creation or file writing fails
      */
     private void generateSpringFactoriesToOutputDir() throws IOException {
         String outputDir = project.getBuild().getOutputDirectory();
@@ -598,26 +573,13 @@ public class BuildModuleMojo extends AbstractMojo {
 
 
     /**
-     * Removes specific property files from a JAR file by creating a temporary JAR
-     * with the excluded files and replacing the original JAR.
+     * Removes specific application and worker property files from the built JAR.
      * <p>
-     * This method removes property files matching predefined sets of filenames
-     * ("application.properties", "application.yaml", "application.yml") and
-     * ("application-worker.properties", "application-worker.yaml",
-     * "application-worker.yml") under specific conditions.
-     * <p>
-     * If the `forceEnableWorkerProfile` field is false, worker-specific property
-     * files are also removed.
-     * <p>
-     * The method verifies the existence of the target JAR file and logs warnings
-     * if not found. It performs this operation safely by using a temporary JAR for
-     * modifications and replacing the original only after successful processing.
-     * <p>
-     * If the original JAR cannot be deleted or the temporary JAR cannot be renamed,
-     * an IOException is thrown.
+     * Excludes "application.properties", "application.yaml", and "application.yml" from the root or BOOT-INF/classes/ directory.
+     * Also removes "application-worker.properties", "application-worker.yaml", and "application-worker.yml" from these locations unless {@code forceEnableWorkerProfile} is true.
+     * The method creates a temporary JAR without the excluded files and atomically replaces the original JAR.
      *
-     * @throws IOException if an I/O error occurs during file operations or if
-     *                     renaming the temporary JAR fails
+     * @throws IOException if an I/O error occurs during file operations or if the JAR cannot be replaced
      */
     private void removeProperties() throws IOException {
         File jarFile = new File(project.getBuild().getDirectory(), project.getBuild().getFinalName() + ".jar");
@@ -683,6 +645,12 @@ public class BuildModuleMojo extends AbstractMojo {
         }
     }
 
+    /**
+     * Determines if the given entry name is located at the root of the archive or under the {@code BOOT-INF/classes/} directory.
+     *
+     * @param name the entry name to check
+     * @return {@code true} if the entry is at the root or within {@code BOOT-INF/classes/}; {@code false} otherwise
+     */
     private boolean isRootOrClasspath(String name) {
         return !name.contains("/") ||
                 name.startsWith("BOOT-INF/classes/");
