@@ -114,9 +114,24 @@ public class BuildModuleMojo extends AbstractMojo {
      * The values in this list are typically defined as strings representing exclusion patterns.
      * These patterns might follow a specific syntax suitable for filtering files or directories,
      * ensuring they are ignored during the operation or processing.
+     * The exclude format is based upon the dependency conflict id which has a form of:
+     * groupId:artifactId:type:classifier. A shortened form of the dependency conflict id may
+     * also be used groupId:artifactId. For wildcard matching use the symbol '*'.
      */
     @Parameter(property = "excludes")
     private List<String> excludes = new ArrayList<>();
+
+    /**
+     * A list of patterns used to specify files or directories to be force included in processing.
+     * The values in this list are typically defined as strings representing inclusion patterns.
+     * These patterns might follow a specific syntax suitable for filtering files or directories,
+     * ensuring they are ignored during the operation or processing.
+     * The include format is based upon the dependency conflict id which has a form of:
+     * groupId:artifactId:type:classifier. A shortened form of the dependency conflict id may
+     * also be used groupId:artifactId. For wildcard matching use the symbol '*'.
+     */
+    @Parameter(property = "includes")
+    private List<String> includes = new ArrayList<>();
 
     /**
      * A boolean flag that determines if the operation should produce a single output.
@@ -506,6 +521,10 @@ public class BuildModuleMojo extends AbstractMojo {
         if (log().isDebugEnabled())
             log().debug("Excluding extra dependencies: " + excludes);
         excludes.forEach(depSet::exclude);
+        if (log().isDebugEnabled()) {
+            log().debug("Including extra dependencies: " + includes);
+        }
+        includes.forEach(depSet::include);
     }
 
     /**
@@ -540,6 +559,10 @@ public class BuildModuleMojo extends AbstractMojo {
         if (log().isDebugEnabled())
             log().debug("Excluding extra dependencies: " + excludes);
         excludes.forEach(depSet::exclude);
+        if (log().isDebugEnabled()) {
+            log().debug("Including extra dependencies: " + includes);
+        }
+        includes.forEach(depSet::include);
     }
 
     /**
